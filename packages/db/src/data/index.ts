@@ -1,5 +1,6 @@
 export * from "./app-settings.js";
 export * from "./app-theme.js";
+export * from "./database-storage.js";
 export * from "./environments.js";
 export * from "./event-rewrite-generation.js";
 export * from "./events.js";
