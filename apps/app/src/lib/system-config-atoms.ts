@@ -31,6 +31,7 @@ const unavailableSystemConfig: SystemConfigResponse = {
   performanceDiagnosticsAvailable: false,
   experiments: {
     agentCpuPriority: false,
+    savedThreads: false,
     compactExpiredCache: false,
     dismissReadNotifications: false,
     serverMove: false,
