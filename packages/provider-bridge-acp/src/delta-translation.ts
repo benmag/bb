@@ -961,7 +961,7 @@ export function createAcpDeltaTranslator(
               vouchedTurn: true,
             },
           ] satisfies ThreadDelta[])),
-      { kind: "turn.boundary", status, claimIfIdle: true },
+      { kind: "turn.boundary", status },
     ];
   }
 
@@ -1056,6 +1056,13 @@ export function createAcpDeltaTranslator(
           status === "skipped" ? "completed" : status;
         return [
           ...flushOpenTurnWork(context, itemStatusForTurnStatus(turnStatus)),
+          {
+            kind: "item.close",
+            key: { channel: "compaction" },
+            status: itemStatusForTurnStatus(turnStatus),
+            item: { type: "compaction" },
+            presentation: COMPACTION_PRESENTATION,
+          },
           ...(status === "completed"
             ? ([{ kind: "context.compacted" }] as ThreadDelta[])
             : []),
