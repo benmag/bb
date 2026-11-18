@@ -138,6 +138,7 @@ import {
 } from "./MessageMetadata.js";
 import { runPluginMessageAction } from "@/lib/plugin-message-actions.js";
 import { useAppNavigationHost } from "@/lib/app-navigation-host";
+import { useSurfaceMessageActionSlots } from "@/lib/message-action-surface";
 import type { AppPanelController } from "@/lib/app-fixed-tab-navigation";
 import {
   usePluginComposerHost,
@@ -2343,7 +2344,7 @@ function ThreadTimelineRowsForTimelineView(props: ThreadTimelineRowsProps) {
   const projectId = props.projectId;
   const messageDirectiveSlots = usePluginSlotKind("messageDirectives");
   const codeFenceRendererSlots = usePluginSlotKind("codeFenceRenderers");
-  const messageActionSlots = usePluginSlotKind("messageActions");
+  const messageActionSlots = useSurfaceMessageActionSlots();
   const messageMetadataSlots = usePluginSlotKind("messageMetadata");
   const messageDirectiveRegistry = useMemo(
     () => buildMessageDirectiveRegistry(messageDirectiveSlots),
