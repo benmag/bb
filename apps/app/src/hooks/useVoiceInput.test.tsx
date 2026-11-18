@@ -782,7 +782,10 @@ it("uses native dictation instead of MediaRecorder when the shell can dictate", 
       batches: ["hello", "there"],
     });
   });
-  expect(onLiveTranscript).toHaveBeenCalledWith("hello there");
+  expect(onLiveTranscript).toHaveBeenCalledWith("hello there", [
+    "hello",
+    "there",
+  ]);
   vi.mocked(stopShellNativeVoiceDictation).mockResolvedValueOnce("hello there");
   await act(async () => result.current.stop("send"));
   expect(onTranscript).toHaveBeenCalledWith("hello there", "send");

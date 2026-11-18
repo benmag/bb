@@ -509,15 +509,6 @@ export class VoiceDictationSession {
     };
   }
 
-  getDiagnostics(): VoiceDictationDiagnostics {
-    return {
-      active: this.active,
-      callActive: this.callUuid !== null,
-      audioSessionActive: this.audioSessionActive,
-      recognizerActive: this.recognizerIsActive(),
-    };
-  }
-
   private async teardown(
     reason: "stopped" | "cancelled" | "error" | "system",
   ): Promise<void> {

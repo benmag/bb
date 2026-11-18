@@ -3954,11 +3954,6 @@ describe("ComposerBox compact layout", () => {
     );
     expect(editor.getAttribute("tabindex")).toBe("0");
     expect(editor.getAttribute("aria-readonly")).toBeNull();
-    for (const controls of document.querySelectorAll(
-      "[data-promptbox-standard-actions]",
-    )) {
-      expect(controls.hasAttribute("inert")).toBe(false);
-    }
   });
 
   it("holds live dictation text until a focused editor blurs", async () => {

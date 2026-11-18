@@ -113,8 +113,7 @@
             "usesCleartextTraffic": true
           }
         }
-      ],
-
+      ]
     ],
     "experiments": {
       "typedRoutes": true

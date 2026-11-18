@@ -40,31 +40,6 @@ export function VoiceDictationSpikeScreen() {
     }, 500);
     return () => clearInterval(timer);
   }, []);
-  const [typed, setTyped] = useState("");
-  const [keyboardVisible, setKeyboardVisible] = useState(false);
-  const [diagnostics, setDiagnostics] = useState<VoiceDictationDiagnostics>(
-    () => getVoiceDictationSession().getDiagnostics(),
-  );
-
-  useEffect(() => {
-    const shown = Keyboard.addListener("keyboardDidShow", () =>
-      setKeyboardVisible(true),
-    );
-    const hidden = Keyboard.addListener("keyboardDidHide", () =>
-      setKeyboardVisible(false),
-    );
-    return () => {
-      shown.remove();
-      hidden.remove();
-    };
-  }, []);
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setDiagnostics(getVoiceDictationSession().getDiagnostics());
-    }, 500);
-    return () => clearInterval(timer);
-  }, []);
 
   useEffect(() => {
     const session = getVoiceDictationSession();
