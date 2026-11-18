@@ -132,8 +132,9 @@ Server sweeps
 
 The server retries background sweep items that fail (for example an
 environment cleanup step or a retention pass) after 1, 2, 4, 8, 16, 32, and 60
-minutes. After eight failed attempts an item needs recovery and is not run
-again until you retry it; other items keep running.
+minutes. After eight failed attempts an item needs recovery: it keeps retrying
+once an hour, and the first success clears it. `bb server sweeps retry` gives it
+a fresh budget and runs it on the next sweep. Other items keep running.
 
   bb server sweeps                        List failing sweep items and their state
     --json                                Print machine-readable JSON output

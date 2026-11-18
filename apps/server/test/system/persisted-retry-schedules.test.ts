@@ -14,7 +14,10 @@ import type { PluginHookName } from "@get-bb/plugin-sdk";
 import { validatePluginEnvironmentProviderDeclaration } from "@get-bb/plugin-sdk/internal/host-policy";
 import { z } from "zod";
 import { sweepProviderLifecycles } from "../../src/services/environments/environment-engine.js";
-import { sweepMachineLifecycles } from "../../src/services/machines/provider-orchestration.js";
+import {
+  requestMachineRemoval,
+  sweepMachineLifecycles,
+} from "../../src/services/machines/provider-orchestration.js";
 import { setPluginEnvironmentProviderBridge } from "../../src/services/plugins/plugin-environment-provider-registry.js";
 import {
   setPluginHookProvider,
@@ -72,7 +75,7 @@ const PERSISTED_RETRY_SCHEDULES: Record<string, PersistedRetrySchedule> = {
   },
   "sweep_item_failures.retry_at": {
     attemptColumn: "attempts",
-    exhausted: { kind: "stops" },
+    exhausted: { kind: "slow-retry", everyMs: HOUR_MS },
     arrange: arrangeSweepItem,
   },
   "queued_thread_messages.next_attempt_at": {
@@ -442,6 +445,57 @@ describe("needs recovery", () => {
       expect(scenario.schedule()).toBe(Date.now() + 60_000);
     }));
 
+  it("tears a machine down after its lifecycle sweep needed recovery outside removal", async () =>
+    withTestHarness(async (harness) => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(1_000_000);
+      let resumes = 0;
+      let removals = 0;
+      installMachineProvider({
+        suspend: async () => ({ resource: { allocation: "kept" } }),
+        resume: async () => {
+          resumes += 1;
+          throw new Error("provider resume is down");
+        },
+        remove: async () => {
+          removals += 1;
+          return { status: "removed" as const };
+        },
+      });
+      const id = createHostId();
+      harness.db
+        .insert(hosts)
+        .values({
+          id,
+          name: "Suspend interrupted",
+          type: "persistent",
+          machineProviderId: "test-machine",
+          phase: "suspending",
+          resource: { allocation: "kept" },
+          createdAt: 1,
+          updatedAt: 1,
+        })
+        .run();
+      for (let round = 0; round < MAX_ROUNDS; round += 1) {
+        await sweepMachineLifecycles(harness.deps);
+        const failure = listSweepItemFailures(
+          harness.db,
+          "machine-provider-lifecycle",
+        )[0];
+        if (failure === undefined) throw new Error("resume did not fail");
+        if (failure.attempts >= 8) break;
+        vi.setSystemTime(failure.retryAt);
+      }
+      expect(resumes).toBe(8);
+
+      requestMachineRemoval(harness.deps, id);
+      vi.setSystemTime(Date.now() + 2 * HOUR_MS);
+      await sweepMachineLifecycles(harness.deps);
+
+      expect(removals).toBe(1);
+      expect(getHost(harness.db, id)?.phase).toBe("destroyed");
+    }));
+
   it("lists sweep items that need recovery and runs them again after retry", async () =>
     withTestHarness(async (harness) => {
       let failing = true;
@@ -459,10 +513,9 @@ describe("needs recovery", () => {
       let now = 1_000_000;
       await sweep.run(harness.deps, now);
       for (let round = 0; round < MAX_ROUNDS; round += 1) {
-        const retryAt = listSweepItemFailures(harness.db, sweep.name)[0]
-          ?.retryAt;
-        if (retryAt === undefined || retryAt === null) break;
-        now = retryAt;
+        const failure = listSweepItemFailures(harness.db, sweep.name)[0];
+        if (failure === undefined || failure.attempts >= 8) break;
+        now = failure.retryAt;
         await sweep.run(harness.deps, now);
       }
       const listed = await harness.app.request("/api/v1/server/sweep-failures");
@@ -472,7 +525,7 @@ describe("needs recovery", () => {
             sweep: sweep.name,
             itemKey: "poison",
             attempts: 8,
-            retryAt: null,
+            retryAt: now + HOUR_MS,
             needsRecovery: true,
             lastError: "item keeps failing",
           }),

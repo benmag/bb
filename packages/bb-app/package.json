@@ -87,6 +87,7 @@
   },
   "devDependencies": {
     "@bb/config": "workspace:*",
+    "@bb/domain": "workspace:*",
     "@bb/host-daemon-contract": "workspace:*",
     "@bb/process-utils": "workspace:*",
     "@bb/sdk": "workspace:*",

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "6f58db16-473d-41e9-b9e6-5e453562a7cd",
+  "id": "74231ad8-8cc4-45f7-8eab-82f2c3e228c1",
   "prevId": "d3a65588-84ff-4788-9ada-54a9279bbeb6",
   "tables": {
     "app_settings": {
@@ -3965,7 +3965,7 @@
           "name": "retry_at",
           "type": "integer",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "autoincrement": false
         },
         "last_error": {

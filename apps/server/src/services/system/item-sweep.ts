@@ -2,11 +2,14 @@ import {
   deleteSweepItemFailures,
   getSweepItemFailure,
   listSweepItemFailures,
-  nextPersistedRetryAt,
+  persistedRetryExhausted,
   upsertSweepItemFailure,
 } from "@bb/db";
 import type { AppDeps } from "../../types.js";
-import { SWEEP_ITEM_RETRY_DELAYS_MS } from "../lib/persisted-retry.js";
+import {
+  SWEEP_ITEM_RETRY_DELAYS_MS,
+  nextSlowPersistedRetryAt,
+} from "../lib/persisted-retry.js";
 
 const FORGET_UNLISTED_FAILURE_AFTER_MS = 60 * 60_000;
 const ITEM_DETACH_AFTER_MS = 60_000;
@@ -66,7 +69,7 @@ function recordSweepFailure(
 ): void {
   const previous = getSweepItemFailure(deps.db, args);
   const attempts = (previous?.attempts ?? 0) + 1;
-  const retryAt = nextPersistedRetryAt(
+  const retryAt = nextSlowPersistedRetryAt(
     SWEEP_ITEM_RETRY_DELAYS_MS,
     attempts,
     args.now,
@@ -87,11 +90,13 @@ function recordSweepFailure(
     retryAt,
     sweep: args.sweep,
   };
-  if (retryAt === null) {
+  if (attempts === SWEEP_ITEM_RETRY_DELAYS_MS.length + 1) {
     deps.logger.error(
       log,
-      "Sweep item needs recovery; it will not run again until bb server sweeps retry",
+      "Sweep item needs recovery; retrying hourly until it succeeds or bb server sweeps retry",
     );
+  } else if (persistedRetryExhausted(SWEEP_ITEM_RETRY_DELAYS_MS, attempts)) {
+    deps.logger.warn(log, "Sweep item still needs recovery; retrying hourly");
   } else {
     deps.logger.warn(log, "Sweep item failed; retrying later");
   }
@@ -133,7 +138,7 @@ async function runItemSweep<T>(
   );
   const inFlight = inFlightKeys(sweep);
   const backingOff = [...failures.values()]
-    .filter((failure) => failure.retryAt === null || failure.retryAt > now)
+    .filter((failure) => failure.retryAt > now)
     .map((failure) => failure.itemKey);
   const failedThisPass = new Set<string>();
   const started = new Set<string>();
@@ -185,7 +190,6 @@ async function runItemSweep<T>(
     itemKeys: [...failures.values()]
       .filter(
         (failure) =>
-          failure.retryAt !== null &&
           failure.retryAt <= now - FORGET_UNLISTED_FAILURE_AFTER_MS &&
           !listedKeys.has(failure.itemKey) &&
           !inFlight.has(failure.itemKey),

@@ -8,6 +8,7 @@ import {
 import type { ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { relayDesktopAppUpdates } from "@bb/config/desktop-app-update";
+import { calculateExponentialBackoffDelay } from "@bb/domain";
 import { announceDesktopRuntimeReady } from "@bb/config/desktop-runtime-ready";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { spawnLoggedProcess } from "./logged-process.js";
@@ -3101,10 +3102,11 @@ function noteManagedProcessExit(budget: ManagedRestartBudget): void {
 
 function recordManagedRestartFailure(budget: ManagedRestartBudget): number {
   budget.failures += 1;
-  return Math.min(
-    MANAGED_PROCESS_RESTART_MAX_DELAY_MS,
-    MANAGED_PROCESS_RESTART_INITIAL_DELAY_MS * 2 ** (budget.failures - 1),
-  );
+  return calculateExponentialBackoffDelay({
+    attempt: budget.failures,
+    baseDelayMs: MANAGED_PROCESS_RESTART_INITIAL_DELAY_MS,
+    maxDelayMs: MANAGED_PROCESS_RESTART_MAX_DELAY_MS,
+  });
 }
 
 function managedRestartsExhausted(budget: ManagedRestartBudget): boolean {

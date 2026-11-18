@@ -1,3 +1,5 @@
+import { nextPersistedRetryAt } from "@bb/db";
+
 const MINUTE_MS = 60_000;
 
 export const TEARDOWN_RETRY_DELAYS_MS: readonly number[] = [
@@ -7,7 +9,7 @@ export const TEARDOWN_RETRY_DELAYS_MS: readonly number[] = [
   8 * MINUTE_MS,
 ];
 
-export const MACHINE_TEARDOWN_SLOW_RETRY_MS = 60 * MINUTE_MS;
+export const NEEDS_RECOVERY_RETRY_INTERVAL_MS = 60 * MINUTE_MS;
 
 export const SWEEP_ITEM_RETRY_DELAYS_MS: readonly number[] = [
   MINUTE_MS,
@@ -24,6 +26,17 @@ export const QUEUED_MESSAGE_RETRY_DELAYS_MS: readonly number[] = [
   MINUTE_MS,
   5 * MINUTE_MS,
 ];
+
+export function nextSlowPersistedRetryAt(
+  retryDelaysMs: readonly number[],
+  attempts: number,
+  now: number,
+): number {
+  return (
+    nextPersistedRetryAt(retryDelaysMs, attempts, now) ??
+    now + NEEDS_RECOVERY_RETRY_INTERVAL_MS
+  );
+}
 
 const NEEDS_RECOVERY_PREFIX = "Needs recovery:";
 

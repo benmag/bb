@@ -7,7 +7,6 @@ import {
   hostDaemonSessions,
   hosts,
   environments as environmentRows,
-  nextPersistedRetryAt,
   persistedRetryExhausted,
 } from "@bb/db";
 import { handleHostRemoved } from "../../internal/session-owner-side-effects.js";
@@ -58,10 +57,11 @@ import { hasPendingProjectSourceSetupOnHost } from "../projects/project-source-s
 import { machineProviderUnavailableReason } from "./provider-availability.js";
 import { errorMessage } from "../lib/error-log-fields.js";
 import {
-  MACHINE_TEARDOWN_SLOW_RETRY_MS,
+  NEEDS_RECOVERY_RETRY_INTERVAL_MS,
   TEARDOWN_RETRY_DELAYS_MS,
   isNeedsRecoveryMessage,
   needsRecoveryMessage,
+  nextSlowPersistedRetryAt,
 } from "../lib/persisted-retry.js";
 import { toHostWithStatus } from "../lib/entity-lookup.js";
 import { perDbRegistry } from "../lib/per-db-registry.js";
@@ -1159,9 +1159,11 @@ function recordMachineTeardownFailure(
     TEARDOWN_RETRY_DELAYS_MS,
     failure.attempt,
   );
-  const removeRetryAt =
-    nextPersistedRetryAt(TEARDOWN_RETRY_DELAYS_MS, failure.attempt, now) ??
-    now + MACHINE_TEARDOWN_SLOW_RETRY_MS;
+  const removeRetryAt = nextSlowPersistedRetryAt(
+    TEARDOWN_RETRY_DELAYS_MS,
+    failure.attempt,
+    now,
+  );
   updateHost(deps.db, deps.hub, hostId, {
     teardownAttempt: failure.attempt,
     teardownStatus: "failed",
@@ -1483,7 +1485,7 @@ export async function sweepProviderMachine(
               ? needsRecoveryMessage(message, null)
               : message,
           removeRetryAt:
-            failed.retireAt ?? Date.now() + MACHINE_TEARDOWN_SLOW_RETRY_MS,
+            failed.retireAt ?? Date.now() + NEEDS_RECOVERY_RETRY_INTERVAL_MS,
         });
         deps.hub.notifyHost(hostId, ["host-disconnected"]);
       }

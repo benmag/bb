@@ -607,16 +607,17 @@ export function registerServerCommands(
           return;
         }
         for (const failure of response.failures) {
+          const next = new Date(failure.retryAt).toISOString();
           const state = failure.needsRecovery
-            ? "needs recovery"
-            : `retrying at ${new Date(failure.retryAt ?? 0).toISOString()}`;
+            ? `needs recovery, retrying hourly (next at ${next})`
+            : `retrying at ${next}`;
           console.log(
             `${failure.sweep} ${failure.itemKey}: ${state} after ${String(failure.attempts)} attempts - ${failure.lastError}`,
           );
         }
         if (response.failures.some((failure) => failure.needsRecovery)) {
           console.log(
-            "Fix the cause, then run bb server sweeps retry to run the items that need recovery again.",
+            "Fix the cause, then run bb server sweeps retry to run the items that need recovery on the next sweep with a fresh retry budget.",
           );
         }
       }),

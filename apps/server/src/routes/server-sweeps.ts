@@ -1,6 +1,7 @@
 import {
-  deleteSweepItemFailuresNeedingRecovery,
+  deleteSweepItemFailuresAfterAttempts,
   listAllSweepItemFailures,
+  persistedRetryExhausted,
 } from "@bb/db";
 import {
   publicApiRoutes,
@@ -13,6 +14,7 @@ import {
   getGateAuthKind,
   type RequestHeaderReader,
 } from "../request-context.js";
+import { SWEEP_ITEM_RETRY_DELAYS_MS } from "../services/lib/persisted-retry.js";
 import type { AppDeps } from "../types.js";
 
 function assertOwnerRequest(context: RequestHeaderReader): void {
@@ -40,7 +42,10 @@ export function registerServerSweepRoutes(
     return context.json({
       failures: listAllSweepItemFailures(deps.db).map((failure) => ({
         ...failure,
-        needsRecovery: failure.retryAt === null,
+        needsRecovery: persistedRetryExhausted(
+          SWEEP_ITEM_RETRY_DELAYS_MS,
+          failure.attempts,
+        ),
       })),
     });
   });
@@ -48,7 +53,10 @@ export function registerServerSweepRoutes(
   post(routes.retrySweepFailures, (context) => {
     assertOwnerRequest(context);
     return context.json({
-      retried: deleteSweepItemFailuresNeedingRecovery(deps.db),
+      retried: deleteSweepItemFailuresAfterAttempts(
+        deps.db,
+        SWEEP_ITEM_RETRY_DELAYS_MS.length,
+      ),
     });
   });
 }

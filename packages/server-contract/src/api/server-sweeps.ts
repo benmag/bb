@@ -7,7 +7,7 @@ export const serverSweepFailureSchema = z
     attempts: z.number().int().positive(),
     firstFailedAt: z.number().int(),
     lastError: z.string(),
-    retryAt: z.number().int().nullable(),
+    retryAt: z.number().int(),
     needsRecovery: z.boolean(),
   })
   .strict();

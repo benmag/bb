@@ -1032,7 +1032,7 @@ export const sweepItemFailures = sqliteTable(
     itemKey: text("item_key").notNull(),
     attempts: integer("attempts").notNull(),
     firstFailedAt: integer("first_failed_at").notNull(),
-    retryAt: integer("retry_at"),
+    retryAt: integer("retry_at").notNull(),
     lastError: text("last_error").notNull(),
   },
   (table) => [primaryKey({ columns: [table.sweep, table.itemKey] })],

@@ -4175,11 +4175,11 @@ operation id instead of the in-memory status.
 `experimental_server.sweepFailures()` returns every failing item of the
 server's periodic sweeps as `{ sweep, itemKey, attempts, firstFailedAt,
 lastError, retryAt, needsRecovery }`. An item retries after 1, 2, 4, 8, 16,
-32, and 60 minutes; its eighth failure sets `retryAt: null` and
-`needsRecovery: true`, and the runner skips it until
-`retrySweepFailures()` deletes every needs-recovery record and returns
-`{ retried }`, so those items run on the next pass. Backing-off items are
-listed but not retried early. Both refuse machine credentials. Core's caller is
+32, and 60 minutes. From its eighth failure it reports `needsRecovery: true`
+and keeps retrying hourly (`retryAt` is the next probe); its first success
+deletes the record. `retrySweepFailures()` deletes every needs-recovery record
+and returns `{ retried }`, so those items run on the next pass with a fresh
+budget. Backing-off items are listed but not retried early. Both refuse machine credentials. Core's caller is
 `bb server sweeps [retry]`; the delays come from
 `apps/server/src/services/lib/persisted-retry.ts`, the owner every persisted
 retry schedule uses.
