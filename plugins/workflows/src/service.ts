@@ -982,28 +982,6 @@ export function createWorkflowService(
         const stopOnAbort = () => void stopChild(child.id);
         signal.addEventListener("abort", stopOnAbort, { once: true });
         try {
-          const current = await bb.sdk.threads.get({ threadId: child.id });
-          throwIfCancelled(signal);
-          if (current.status === "idle") {
-            const output = await bb.sdk.threads.output({ threadId: child.id });
-            throwIfCancelled(signal);
-            onThreadIdle(child.id, output.output);
-          } else if (current.status === "error") {
-            failThreadCall(
-              child.id,
-              "Workflow worker failed before attachment completed",
-            );
-          }
-        } catch (error) {
-          if (signal.aborted) {
-            await stopChild(child.id);
-            throw error;
-          }
-          bb.log.warn(
-            `Could not reconcile new workflow worker ${child.id}: ${message(error)}`,
-          );
-        }
-        try {
           return await waitForCall(call, signal);
         } finally {
           signal.removeEventListener("abort", stopOnAbort);
