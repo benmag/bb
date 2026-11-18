@@ -56,7 +56,7 @@ describe("bb plugin enable", () => {
       "boom@0.0.1  error  (boom)",
       "  source: path:/plugins/boom",
     ]);
-    expect(console.error).toHaveBeenCalledWith("boom");
+    expect(console.error).toHaveBeenCalledWith("Error: boom");
   });
 
   it("reports ok false in JSON when the enabled plugin fails to load", async () => {
