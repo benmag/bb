@@ -87,6 +87,8 @@ export async function validateDaemonWebSocket(
   };
 }
 
+const HEARTBEAT_ACK_PAYLOAD = JSON.stringify({ type: "heartbeat-ack" });
+
 export const SERVER_MOVE_FENCED_DAEMON_MESSAGE_TYPES: ReadonlySet<
   HostDaemonDaemonWsMessage["type"]
 > = new Set([
@@ -157,6 +159,20 @@ export function onDaemonSocketMessage(
   if (message === null) {
     return;
   }
+  const acknowledged =
+    message.type === "heartbeat" &&
+    deps.hub.isDaemonSessionSocket(args.sessionId, args.socket);
+  if (acknowledged) {
+    args.socket.send(HEARTBEAT_ACK_PAYLOAD);
+  }
+  const leaseRenewalDue = deps.hub.takeDaemonLeaseRenewal(
+    args.sessionId,
+    Date.now(),
+    LEASE_TIMEOUT_MS,
+  );
+  if (acknowledged && !leaseRenewalDue) {
+    return;
+  }
 
   try {
     runEventLoopWorkSync(`ws:daemon ${message.type}`, () => {
@@ -164,17 +180,14 @@ export function onDaemonSocketMessage(
         hostId: args.hostId,
         sessionId: args.sessionId,
       });
-      const now = Date.now();
-      if (
-        message.type === "heartbeat" ||
-        now < session.updatedAt ||
-        now - session.updatedAt >= session.heartbeatIntervalMs ||
-        session.leaseExpiresAt <= now + session.heartbeatIntervalMs
-      ) {
+      if (leaseRenewalDue) {
         heartbeatSession(
           deps.db,
           session.id,
-          Math.max(now + session.leaseTimeoutMs, session.leaseExpiresAt + 1),
+          Math.max(
+            Date.now() + session.leaseTimeoutMs,
+            session.leaseExpiresAt + 1,
+          ),
         );
       }
       if (
@@ -308,7 +321,9 @@ export function onDaemonSocketMessage(
         return;
       }
       if (message.type === "heartbeat") {
-        args.socket.send(JSON.stringify({ type: "heartbeat-ack" }));
+        if (!acknowledged) {
+          args.socket.send(HEARTBEAT_ACK_PAYLOAD);
+        }
         return;
       }
       if (message.type === "machine.shutdown-ack") {
