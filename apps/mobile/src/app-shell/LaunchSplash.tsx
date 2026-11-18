@@ -13,7 +13,7 @@ import splashLogo from "../../assets/splash-logo.png";
 import splashLogoDark from "../../assets/splash-logo-dark.png";
 import splashLogoDev from "../../assets/splash-logo-dev.png";
 
-const LAUNCH_SPLASH_MAX_MS = 8000;
+const LAUNCH_SPLASH_MAX_MS = 1500;
 const LAUNCH_SPLASH_FADE_MS = 250;
 const SPLASH_HOLDING_PATHS = new Set(["/", "/webview"]);
 

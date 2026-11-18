@@ -12,7 +12,10 @@ import {
 import { GroupedScreen } from "./GroupedScreen";
 import { HapticsSettingsRow } from "./HapticsSettingsRow";
 import { LinkRow } from "./LinkRow";
-import { settingsSectionHref } from "@/screens/shell/hrefs";
+import {
+  settingsSectionHref,
+  voiceDictationSpikeHref,
+} from "@/screens/shell/hrefs";
 import { SettingsSection } from "./SettingsRows";
 import { useBadgeColors } from "./settings-badges";
 
@@ -63,6 +66,17 @@ export function DeviceSettingsScreen() {
             badge={{ icon: "Bell", symbol: "bell.badge", color: colors.red }}
             href={settingsSectionHref("notifications")}
             testID="device-notifications"
+          />
+          <LinkRow
+            title="Dictation spike"
+            subtitle="CallKit + live speech, including background"
+            badge={{
+              icon: "Smartphone",
+              symbol: "mic.fill",
+              color: colors.blue,
+            }}
+            href={voiceDictationSpikeHref()}
+            testID="device-dictation-spike"
           />
         </SettingsSection>
 

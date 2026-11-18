@@ -19,12 +19,13 @@
         "NSLocalNetworkUsageDescription": "bb connects to a bb server on your local network or tailnet.",
         "NSCameraUsageDescription": "bb attaches photos you take to your prompts.",
         "NSMicrophoneUsageDescription": "bb records voice input and transcribes it into your prompt.",
+        "NSSpeechRecognitionUsageDescription": "bb converts your speech to text in the composer while you dictate.",
         "NSPhotoLibraryUsageDescription": "bb attaches photos you pick to your prompts.",
         "ITSAppUsesNonExemptEncryption": false,
         "NSAppTransportSecurity": {
           "NSAllowsLocalNetworking": true
         },
-        "UIBackgroundModes": ["remote-notification"]
+        "UIBackgroundModes": ["remote-notification", "voip", "audio"]
       },
       "associatedDomains": ["applinks:getbb.app", "applinks:*.getbb.app"]
     },
@@ -69,6 +70,7 @@
     "plugins": [
       "./plugins/with-selection-accent",
       "./plugins/with-push-consent",
+      "./plugins/with-voice-dictation",
       "expo-router",
       "expo-secure-store",
       "expo-image",
@@ -98,15 +100,21 @@
         }
       ],
       "expo-quick-actions",
+      "expo-updates",
       "expo-camera",
       [
         "expo-build-properties",
         {
+          "ios": {
+            "newArchEnabled": true
+          },
           "android": {
+            "newArchEnabled": true,
             "usesCleartextTraffic": true
           }
         }
-      ]
+      ],
+
     ],
     "experiments": {
       "typedRoutes": true

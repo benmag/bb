@@ -10,6 +10,7 @@ export { ProfilesProvider, useProfiles } from "./ProfilesProvider";
 export { ThreadOpenSignalHandler } from "./ThreadOpenSignalHandler";
 export { ShareIntentHandler } from "./ShareIntentHandler";
 export { useAppBoot } from "./useAppBoot";
+export { useExpoUpdates } from "./useExpoUpdates";
 export {
   useConnectionBanner,
   useRealtimeConnectionState,

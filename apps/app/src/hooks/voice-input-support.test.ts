@@ -1,8 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   resolveVoiceSupport,
   voiceUnsupportedMessage,
 } from "./voice-input-support";
+import { isShellNativeVoiceDictationAvailable } from "@/lib/native-shell";
+
+vi.mock("@/lib/native-shell", () => ({
+  isShellNativeVoiceDictationAvailable: vi.fn(() => false),
+}));
 
 describe("resolveVoiceSupport", () => {
   it("is supported when the browser has both APIs", () => {
@@ -33,6 +38,17 @@ describe("resolveVoiceSupport", () => {
         isSecureContext: true,
       }),
     ).toEqual({ isSupported: false, reason: "unsupported-browser" });
+  });
+
+  it("is supported when the native shell can dictate", () => {
+    vi.mocked(isShellNativeVoiceDictationAvailable).mockReturnValueOnce(true);
+    expect(
+      resolveVoiceSupport({
+        hasMediaDevices: false,
+        hasMediaRecorder: false,
+        isSecureContext: false,
+      }),
+    ).toEqual({ isSupported: true, reason: null });
   });
 });
 

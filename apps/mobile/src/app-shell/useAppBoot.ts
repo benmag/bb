@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getProfileStore } from "@/lib/native";
+import { revealApp } from "./LaunchSplash";
 import { resetLocalState, resetOnLaunch } from "./e2e";
 
 export interface AppBootState {
@@ -15,10 +16,16 @@ export function useAppBoot(): AppBootState {
       if (resetOnLaunch) await resetLocalState();
     })()
       .then(() => {
-        if (!cancelled) setState({ ready: true });
+        if (!cancelled) {
+          revealApp();
+          setState({ ready: true });
+        }
       })
       .catch(() => {
-        if (!cancelled) setState({ ready: true });
+        if (!cancelled) {
+          revealApp();
+          setState({ ready: true });
+        }
       });
     return () => {
       cancelled = true;

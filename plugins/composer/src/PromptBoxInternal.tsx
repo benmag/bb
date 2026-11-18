@@ -80,7 +80,7 @@ import {
   getMediaQuerySnapshot,
   REDUCED_MOTION_QUERY,
 } from "@/components/ui/hooks/use-media-query";
-import { blurActiveKeyboardInputWithin } from "@/components/ui/overlay-trigger";
+
 import { cn } from "@/lib/utils";
 import { AttachmentPreview } from "./AttachmentPreview";
 import { areDraftsEqual, isDraftEmpty } from "./composer-draft";
@@ -1222,6 +1222,7 @@ export function PromptBoxInternal({
   const isVoiceRecording = voice?.state === "recording";
   const isVoiceProcessing = voice?.state === "transcribing";
   const showVoiceActionGroup = isVoiceRecording || isVoiceProcessing;
+  const lockComposerForVoice = isVoiceProcessing;
   const voiceActionState = isVoiceRecording
     ? "recording"
     : isVoiceProcessing
@@ -1343,6 +1344,7 @@ export function PromptBoxInternal({
   }, []);
   const showCompactLayout =
     compact?.when === "always" &&
+    !isVoiceRecording &&
     (!showVoiceActionGroup ||
       (value.trim().length === 0 &&
         attachments.length === 0 &&
@@ -2050,7 +2052,10 @@ export function PromptBoxInternal({
 
   useEffect(() => {
     if (!editor || editor.isDestroyed) return;
-    const editable = !composerInputLocked && !showVoiceActionGroup;
+    const shellOwnsKeyboard =
+      document.documentElement.dataset.shellDictationKeyboard !== undefined;
+    const editable =
+      !composerInputLocked && !lockComposerForVoice && !shellOwnsKeyboard;
     if (editor.isEditable !== editable) editor.setEditable(editable);
     editor.view.dom.tabIndex = editable ? 0 : -1;
     if (editable) {
@@ -2058,7 +2063,7 @@ export function PromptBoxInternal({
     } else {
       editor.view.dom.setAttribute("aria-readonly", "true");
     }
-  }, [composerInputLocked, editor, showVoiceActionGroup]);
+  }, [composerInputLocked, editor, lockComposerForVoice]);
 
   useEffect(() => {
     editorRef.current = editor;
@@ -2146,12 +2151,35 @@ export function PromptBoxInternal({
     valueRef.current = value;
   }, [value]);
 
+  const [voiceEditorFocused, setVoiceEditorFocused] = useState(false);
+  useEffect(() => {
+    if (!editor || editor.isDestroyed || !isVoiceRecording) {
+      setVoiceEditorFocused(false);
+      return;
+    }
+    const dom = editor.view.dom;
+    const syncFocus = () => {
+      if (editor.isDestroyed) return;
+      setVoiceEditorFocused(editor.view.hasFocus());
+    };
+    syncFocus();
+    dom.addEventListener("focus", syncFocus);
+    dom.addEventListener("blur", syncFocus);
+    return () => {
+      dom.removeEventListener("focus", syncFocus);
+      dom.removeEventListener("blur", syncFocus);
+    };
+  }, [editor, isVoiceRecording]);
+
   useLayoutEffect(() => {
     if (!editor) return;
     const nextValue = {
       text: value,
       mentions: mentionRanges,
     };
+    if (isVoiceRecording && (voiceEditorFocused || editor.view.hasFocus())) {
+      return;
+    }
     if (
       arePromptEditorValuesEqual(lastSyncedEditorValueRef.current, nextValue)
     ) {
@@ -2173,10 +2201,12 @@ export function PromptBoxInternal({
     scheduleRevealEditorSelection();
   }, [
     editor,
+    isVoiceRecording,
     mentionRanges,
     scheduleRevealEditorSelection,
     syncTriggerState,
     value,
+    voiceEditorFocused,
   ]);
 
   useLayoutEffect(() => {
@@ -2936,21 +2966,14 @@ export function PromptBoxInternal({
     (!showVoiceAsPrimaryAction || showStop);
   const handleVoicePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLButtonElement>) => {
-      if (!isPointerCoarse || event.button !== 0) return;
-
+      if (event.button !== 0) return;
       event.preventDefault();
     },
-    [isPointerCoarse],
+    [],
   );
   const startVoiceInput = useCallback(() => {
-    if (isPointerCoarse) {
-      const currentEditor = editorRef.current;
-      if (currentEditor && !currentEditor.isDestroyed) {
-        blurActiveKeyboardInputWithin(currentEditor.view.dom);
-      }
-    }
     void voice?.start();
-  }, [isPointerCoarse, voice]);
+  }, [voice]);
   const cancelVoiceInput = useCallback(() => {
     if (voiceActionRevealFrameRef.current !== null) {
       window.cancelAnimationFrame(voiceActionRevealFrameRef.current);
@@ -3081,6 +3104,9 @@ export function PromptBoxInternal({
 
   const handlePromptBoxMouseDown = useCallback(
     (event: PromptBoxMouseDownEvent) => {
+      if (document.documentElement.dataset.shellDictationKeyboard !== undefined) {
+        return;
+      }
       if (!isPromptBoxChromeTarget(event.target)) return;
 
       const currentEditor = editorRef.current;
@@ -3330,6 +3356,7 @@ export function PromptBoxInternal({
       data-promptbox-compact={showCompactLayout ? "" : undefined}
       data-promptbox-collapsed={compact === undefined ? undefined : ""}
       data-promptbox-voice-active={showVoiceActionGroup ? "" : undefined}
+      data-promptbox-voice-recording={isVoiceRecording ? "" : undefined}
       onSubmit={handleSubmit}
       onKeyDown={(event) => handleComposerMenuKeyDown(event.nativeEvent)}
       onMouseDown={handlePromptBoxMouseDown}
@@ -3358,7 +3385,7 @@ export function PromptBoxInternal({
       />
       {handoff ? (
         <div
-          inert={showVoiceActionGroup ? true : undefined}
+          inert={lockComposerForVoice ? true : undefined}
           className="px-3 pt-1.5"
         >
           {handoff}
@@ -3384,7 +3411,7 @@ export function PromptBoxInternal({
           className={cn(
             "min-h-0 overflow-hidden transition-opacity duration-[180ms] motion-reduce:transition-none",
             showCompactLayout && "relative flex h-12 items-center",
-            showVoiceActionGroup && "pointer-events-none",
+            lockComposerForVoice && "pointer-events-none",
           )}
         >
           {showCompactLayout ? (
@@ -3403,12 +3430,12 @@ export function PromptBoxInternal({
           <div
             data-promptbox-input-region=""
             aria-hidden={
-              showCompactLayout && showVoiceActionGroup ? true : undefined
+              showCompactLayout && lockComposerForVoice ? true : undefined
             }
             className={cn(
               "relative",
               showCompactLayout && "min-w-0 flex-1",
-              showCompactLayout && showVoiceActionGroup && "invisible",
+              showCompactLayout && lockComposerForVoice && "invisible",
             )}
           >
             {!showCompactLayout ? (
@@ -3426,7 +3453,7 @@ export function PromptBoxInternal({
                   <div
                     data-promptbox-expanded-only=""
                     data-promptbox-standard-actions=""
-                    inert={showVoiceActionGroup ? true : undefined}
+                    inert={lockComposerForVoice ? true : undefined}
                     className="absolute right-[13px] top-2 z-20 flex items-center"
                   >
                     <Button
@@ -3499,7 +3526,7 @@ export function PromptBoxInternal({
             <>
               <div
                 data-promptbox-expanded-only=""
-                inert={showVoiceActionGroup ? true : undefined}
+                inert={lockComposerForVoice ? true : undefined}
               >
                 <AttachmentPreview
                   attachments={attachments}

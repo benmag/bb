@@ -14,6 +14,9 @@ export interface VoiceSupport {
 export function resolveVoiceSupport(
   environment: VoiceSupportEnvironment,
 ): VoiceSupport {
+  if (isShellNativeVoiceDictationAvailable()) {
+    return { isSupported: true, reason: null };
+  }
   if (environment.hasMediaDevices && environment.hasMediaRecorder) {
     return { isSupported: true, reason: null };
   }
@@ -32,6 +35,8 @@ export function voiceUnsupportedMessage(
     ? "Voice input needs an HTTPS connection to this server"
     : "Voice input is not supported in this browser";
 }
+
+import { isShellNativeVoiceDictationAvailable } from "@/lib/native-shell";
 
 export function readVoiceSupportEnvironment(): VoiceSupportEnvironment {
   if (typeof window === "undefined" || typeof navigator === "undefined") {

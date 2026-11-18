@@ -49,6 +49,8 @@ import { Button, EmptyStatePanel, Spinner, Text, toast } from "@/ui";
 import { describeError } from "@/lib/describe-error";
 import { Linking } from "react-native";
 import { useShellBridge } from "./useShellBridge";
+import { ComposerDictationSheet } from "./ComposerDictationSheet";
+import { isDictationSpikeBuild } from "@/lib/voice-dictation";
 import {
   SHELL_NATIVE_DOWNLOADS_SUPPORTED,
   useShellFileSaver,
@@ -84,6 +86,9 @@ export function ProfileWebViewScreen() {
   const canGoBack = useRef(false);
   const [load, setLoad] = useState<ShellLoadPhase>({ kind: "loading" });
   const [reloadKey, setReloadKey] = useState(0);
+  const [composerDictationText, setComposerDictationText] = useState<
+    string | null
+  >(null);
   const [visited, setVisited] = useState<{
     scope: string;
     path: string;
@@ -162,7 +167,29 @@ export function ProfileWebViewScreen() {
         });
       });
     },
+    onComposerDictationKeyboard: ({ open, text }) => {
+      setComposerDictationText(open ? text : null);
+    },
   });
+
+  const commitDictation = useCallback(
+    (text: string) => {
+      bridge.send({
+        type: "composer-dictation-commit",
+        text,
+        action: "insert",
+      });
+    },
+    [bridge],
+  );
+
+  const discardDictation = useCallback(() => {
+    bridge.send({
+      type: "composer-dictation-commit",
+      text: "",
+      action: "discard",
+    });
+  }, [bridge]);
 
   const servers = useMemo(
     () => bridgeServersForProfiles(profiles, activeProfile?.id ?? null),
@@ -252,6 +279,7 @@ export function ProfileWebViewScreen() {
         "open-external",
         "safe-area",
         "open-native",
+        ...(Platform.OS === "ios" ? (["voice-dictation"] as const) : []),
       ],
       ...(SHELL_NATIVE_DOWNLOADS_SUPPORTED
         ? { nativeDownloads: true as const }
@@ -277,6 +305,10 @@ export function ProfileWebViewScreen() {
   useEffect(() => {
     if (showsFailure) revealApp();
   }, [showsFailure]);
+
+  useEffect(() => {
+    if (screen.kind === "loading") revealApp();
+  }, [screen.kind]);
 
   if (screen.kind === "no-profile") {
     return <Redirect href="/settings/servers/add" />;
@@ -355,7 +387,7 @@ export function ProfileWebViewScreen() {
         key={`${loadScope}#${reloadKey}`}
         ref={webViewRef}
         initialUrl={sourceUrl}
-        style={{ backgroundColor: tokens.background }}
+        style={{ flex: 1, backgroundColor: tokens.background }}
         originWhitelist={SHELL_ORIGIN_WHITELIST}
         sharedCookiesEnabled
         javaScriptEnabled
@@ -369,7 +401,7 @@ export function ProfileWebViewScreen() {
         pullToRefreshEnabled={false}
         automaticallyAdjustContentInsets={false}
         contentInsetAdjustmentBehavior="never"
-        webviewDebuggingEnabled={__DEV__}
+        webviewDebuggingEnabled={__DEV__ || isDictationSpikeBuild()}
         injectedJavaScriptBeforeContentLoaded={buildBridgeInjectionScript(
           handshake,
           servers,
@@ -423,11 +455,13 @@ export function ProfileWebViewScreen() {
           const path = shellPathFromUrl(state.url, profile.serverUrl);
           if (path !== null) rememberPath(path);
         }}
-        onLoadEnd={() =>
+        onLoadStart={() => revealApp()}
+        onLoadEnd={() => {
+          revealApp();
           setLoad((previous) =>
             previous.kind === "loading" ? { kind: "ready" } : previous,
-          )
-        }
+          );
+        }}
         onError={(event) =>
           setLoad({
             kind: "failed",
@@ -442,6 +476,13 @@ export function ProfileWebViewScreen() {
         onContentProcessDidTerminate={retry}
         onRenderProcessGone={retry}
       />
+      {composerDictationText !== null ? (
+        <ComposerDictationSheet
+          initialText={composerDictationText}
+          onCommit={commitDictation}
+          onDiscard={discardDictation}
+        />
+      ) : null}
       {screen.serverErrorStatus !== null ? (
         <View
           pointerEvents="box-none"

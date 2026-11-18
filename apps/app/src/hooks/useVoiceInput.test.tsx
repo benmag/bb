@@ -6,6 +6,13 @@ import { appToast } from "@/components/ui/app-toast";
 import { useAudioInputDevicePreferenceValue } from "@/lib/audio-input-device-preference";
 import { saveFile } from "@/lib/save-file";
 import { useVoiceInput } from "./useVoiceInput";
+import {
+  isShellNativeVoiceDictationAvailable,
+  startShellNativeVoiceDictation,
+  stopShellNativeVoiceDictation,
+  cancelShellNativeVoiceDictation,
+  subscribeShellNativeVoiceDictation,
+} from "@/lib/native-shell";
 
 vi.mock("@/components/ui/app-toast", () => ({ appToast: { error: vi.fn() } }));
 vi.mock("@/lib/save-file", () => ({ saveFile: vi.fn() }));
@@ -13,6 +20,17 @@ vi.mock("@/lib/audio-input-device-preference", () => ({
   useAudioInputDevicePreferenceValue: vi.fn(() => null),
   requestAudioInputStream: (mediaDevices: MediaDevices) =>
     mediaDevices.getUserMedia({ audio: true }),
+}));
+vi.mock("@/lib/native-shell", () => ({
+  getNativeShell: vi.fn(() => null),
+  isShellNativeVoiceDictationAvailable: vi.fn(() => false),
+  startShellNativeVoiceDictation: vi.fn(async () => undefined),
+  stopShellNativeVoiceDictation: vi.fn(async () => ""),
+  cancelShellNativeVoiceDictation: vi.fn(async () => undefined),
+  subscribeShellNativeVoiceDictation: vi.fn(() => () => {}),
+  syncShellNativeVoiceDictation: vi.fn(async () => []),
+  batchesToTranscript: (batches: readonly string[]) =>
+    batches.join(" ").replace(/\s+/g, " ").trim(),
 }));
 
 class Recorder {
@@ -53,6 +71,7 @@ class DeferredRecorder extends Recorder {
 }
 
 beforeEach(() => {
+  vi.mocked(isShellNativeVoiceDictationAvailable).mockReturnValue(false);
   vi.mocked(useAudioInputDevicePreferenceValue).mockReturnValue(null);
   vi.useFakeTimers();
   vi.stubGlobal("MediaRecorder", Recorder);
@@ -734,4 +753,55 @@ it("keeps the same recorder and captured audio when a microphone disconnects, an
   expect(lateStop).toHaveBeenCalledOnce();
   expect(transcribe).toHaveBeenCalledOnce();
   expect(result.current.stream).toBeNull();
+});
+
+it("uses native dictation instead of MediaRecorder when the shell can dictate", async () => {
+  vi.mocked(isShellNativeVoiceDictationAvailable).mockReturnValue(true);
+  const onLiveTranscript = vi.fn();
+  const onTranscript = vi.fn();
+  const transcribe = vi.fn();
+  const getUserMedia = vi.mocked(navigator.mediaDevices.getUserMedia);
+  const { result } = renderHook(() =>
+    useVoiceInput({
+      recordingKey: null,
+      onTranscribe: transcribe,
+      onTranscript,
+      onLiveTranscript,
+    }),
+  );
+  await act(() => result.current.start());
+  expect(startShellNativeVoiceDictation).toHaveBeenCalledOnce();
+  expect(getUserMedia).not.toHaveBeenCalled();
+  expect(result.current.state).toBe("recording");
+  const subscribe = vi.mocked(subscribeShellNativeVoiceDictation);
+  const listener = subscribe.mock.calls.at(-1)?.[0];
+  expect(listener).toBeTypeOf("function");
+  act(() => {
+    listener?.({
+      type: "voice-dictation-partial",
+      batches: ["hello", "there"],
+    });
+  });
+  expect(onLiveTranscript).toHaveBeenCalledWith("hello there");
+  vi.mocked(stopShellNativeVoiceDictation).mockResolvedValueOnce("hello there");
+  await act(async () => result.current.stop("send"));
+  expect(onTranscript).toHaveBeenCalledWith("hello there", "send");
+  expect(transcribe).not.toHaveBeenCalled();
+});
+
+it("cancels native dictation without delivering a transcript", async () => {
+  vi.mocked(isShellNativeVoiceDictationAvailable).mockReturnValue(true);
+  const onTranscript = vi.fn();
+  const { result } = renderHook(() =>
+    useVoiceInput({
+      recordingKey: null,
+      onTranscribe: vi.fn(),
+      onTranscript,
+    }),
+  );
+  await act(() => result.current.start());
+  await act(async () => result.current.cancel());
+  expect(cancelShellNativeVoiceDictation).toHaveBeenCalledOnce();
+  expect(onTranscript).not.toHaveBeenCalled();
+  expect(result.current.state).toBe("idle");
 });

@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Button } from "@bb/shared-ui/button";
 import { Icon, type IconName } from "@bb/shared-ui/icon";
 import { cn } from "@bb/shared-ui/lib/utils";
@@ -7,6 +8,10 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@bb/shared-ui/tooltip";
+import {
+  isShellNativeVoiceDictationAvailable,
+  subscribeShellNativeVoiceDictation,
+} from "@/lib/native-shell";
 import type { VoiceDelivery } from "@/lib/voice-recording-store";
 import { WaveformVisualizer } from "./WaveformVisualizer.js";
 
@@ -41,6 +46,20 @@ export function VoiceRecordingBar({
   const isTranscribing = state === "transcribing";
   const isConfirming = isTranscribing && delivery === "insert";
   const isSending = isTranscribing && delivery === "send";
+  const nativeLevels =
+    state === "recording" &&
+    stream === null &&
+    isShellNativeVoiceDictationAvailable();
+  const [level, setLevel] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!nativeLevels) return;
+    setLevel(0);
+    return subscribeShellNativeVoiceDictation((event) => {
+      if (event.type !== "voice-dictation-level") return;
+      setLevel(event.amplitude);
+    });
+  }, [nativeLevels]);
 
   return (
     <div
@@ -63,9 +82,16 @@ export function VoiceRecordingBar({
       </Button>
       <div className="relative flex min-w-0 flex-1 items-center">
         <div
-          className={cn("h-7 w-full", isTranscribing && "animate-shine-icon")}
+          className={cn(
+            "h-7 w-full",
+            isTranscribing && "animate-shine-icon",
+          )}
         >
-          <WaveformVisualizer stream={stream} active={!isTranscribing} />
+          <WaveformVisualizer
+            stream={stream}
+            active={!isTranscribing}
+            level={nativeLevels ? level : null}
+          />
         </div>
         <span className="sr-only" aria-live="polite">
           {isTranscribing ? "Transcribing" : "Recording"}

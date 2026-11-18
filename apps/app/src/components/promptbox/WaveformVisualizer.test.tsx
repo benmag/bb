@@ -116,6 +116,19 @@ describe("WaveformVisualizer", () => {
     },
   );
 
+  it("draws native dictation levels without a media stream", () => {
+    const audio = setupAudio(false);
+    const view = render(
+      <WaveformVisualizer active stream={null} level={0.05} />,
+    );
+    const quiet = audio.drawSample(128);
+    view.rerender(<WaveformVisualizer active stream={null} level={0.9} />);
+    const loud = audio.drawSample(160);
+    expect(loud[0]).toBeGreaterThan(quiet[0]);
+    view.unmount();
+    expect(audio.analysisTrack.stop).not.toHaveBeenCalled();
+  });
+
   it("keeps inactive input static", () => {
     const audio = setupAudio(false);
     render(<WaveformVisualizer active={false} stream={audio.stream} />);

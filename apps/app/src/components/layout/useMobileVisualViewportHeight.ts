@@ -20,6 +20,10 @@ export function isKeyboardFocusTarget(target: EventTarget | null): boolean {
   );
 }
 
+export function isShellDictationKeyboardOpen(): boolean {
+  return document.documentElement.dataset.shellDictationKeyboard !== undefined;
+}
+
 export function useMobileVisualViewportHeight(
   shell: AppShellElement | null,
   restoreImmediatelyOnKeyboardDismissal: boolean,
@@ -48,6 +52,10 @@ export function useMobileVisualViewportHeight(
       }
     };
     const updateKeyboardInset = () => {
+      if (isShellDictationKeyboardOpen()) {
+        setKeyboardInset(true);
+        return;
+      }
       if (
         viewportHeightBeforeKeyboard === null ||
         !isKeyboardFocusTarget(document.activeElement)

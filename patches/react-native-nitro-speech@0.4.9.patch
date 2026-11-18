@@ -1,0 +1,234 @@
+diff --git a/ios/Engines/AnalyzerEngine.swift b/ios/Engines/AnalyzerEngine.swift
+index eb6a2a1..9a10b10 100644
+--- a/ios/Engines/AnalyzerEngine.swift
++++ b/ios/Engines/AnalyzerEngine.swift
+@@ -13,6 +13,7 @@ final class AnalyzerEngine: RecognizerEngine {
+     private var audioProducerTask: Task<Void, Never>?
+     private var recognizerTask: Task<(), Error>?
+     private var lastBatchStartTime: Float64? = nil
++    private var lastBatchIsVolatile = false
+     private var resultBatches: [String] = []
+     
+     init(backend: RecognizerBackend, locale: Locale, delegate: RecognizerDelegate) {
+@@ -194,13 +195,13 @@ final class AnalyzerEngine: RecognizerEngine {
+         recognizerTask?.cancel()
+         recognizerTask = nil
+         lastBatchStartTime = nil
++        lastBatchIsVolatile = false
+         resultBatches = []
+     }
+     
+     private func handleBatch(attrString: AttributedString, rangeStart: CMTime, isFinal: Bool) {
+         var newBatch = String(attrString.characters)
+-        // Ignore all batches without A-z0-9
+-        if !newBatch.contains(/\w+/) {
++        if newBatch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+             return
+         }
+         // Track only when transcription is coming
+@@ -211,9 +212,10 @@ final class AnalyzerEngine: RecognizerEngine {
+             newBatch = Utils.repeatingFilter(newBatch)
+         }
+ //        Log.log("[1] lastBatch: \(self.resultBatches.last ?? "") | newBatch: \(newBatch)")
++        let sameRange = CMTimeGetSeconds(rangeStart) == self.lastBatchStartTime
+         if self.resultBatches.isEmpty {
+             self.resultBatches.append(newBatch)
+-        } else if CMTimeGetSeconds(rangeStart) == self.lastBatchStartTime || isFinal {
++        } else if sameRange || (isFinal && self.lastBatchIsVolatile) {
+ //            Log.log("[2] replace, isFinal: \(isFinal)")
+             self.resultBatches[self.resultBatches.count - 1] = newBatch
+         } else {
+@@ -221,6 +223,7 @@ final class AnalyzerEngine: RecognizerEngine {
+             self.resultBatches.append(newBatch)
+         }
+         self.lastBatchStartTime = CMTimeGetSeconds(rangeStart)
++        self.lastBatchIsVolatile = !isFinal
+         self.recognizerDelegate?.result(batches: self.resultBatches)
+     }
+ }
+diff --git a/ios/Engines/DictationRuntime.swift b/ios/Engines/DictationRuntime.swift
+index e71bb78..5f311e4 100644
+--- a/ios/Engines/DictationRuntime.swift
++++ b/ios/Engines/DictationRuntime.swift
+@@ -21,18 +21,24 @@ final class DictationRuntime: TranscriberRuntime {
+             || config?.iosPreset == IosPreset.shortform {
+             dictationTranscriptionOptions.remove(.punctuation)
+         }
+-        var contentHints: Set<DictationTranscriber.ContentHint> = [
+-            .shortForm,
+-            .farField,
+-        ]
++        var contentHints: Set<DictationTranscriber.ContentHint> = []
++        if config?.iosPreset == IosPreset.shortform {
++            contentHints.formUnion([.shortForm, .farField])
++        }
+         if config?.iosAtypicalSpeech == true {
+             contentHints.insert(.atypicalSpeech)
+         }
++        var reportingOptions: Set<DictationTranscriber.ReportingOption> = [
++            .volatileResults
++        ]
++        if config?.iosPreset == IosPreset.shortform {
++            reportingOptions.insert(.frequentFinalization)
++        }
+         transcriber = DictationTranscriber(
+             locale: locale,
+             contentHints: contentHints,
+             transcriptionOptions: dictationTranscriptionOptions,
+-            reportingOptions: [.frequentFinalization, .volatileResults],
++            reportingOptions: reportingOptions,
+             attributeOptions: [.audioTimeRange]
+         )
+ 
+diff --git a/ios/Engines/RecognizerEngine.swift b/ios/Engines/RecognizerEngine.swift
+index b59e695..205c163 100644
+--- a/ios/Engines/RecognizerEngine.swift
++++ b/ios/Engines/RecognizerEngine.swift
+@@ -10,6 +10,9 @@ class RecognizerEngine {
+     private var appStateObserver: AppStateObserver?
+     private var audioEngine: AVAudioEngine?
+     private var autoStopper: AutoStopper?
++    private var bufferHandler: ((AVAudioPCMBuffer) -> Void)?
++    private var engineObservers: [NSObjectProtocol] = []
++    private var resumingEngine = false
+     private let lg = Lg(prefix: "RecognizerEngine")
+     
+     static let queueLabel = "com.margelo.nitrospeech.engine"
+@@ -155,9 +158,46 @@ class RecognizerEngine {
+         onBuffer: @escaping (AVAudioPCMBuffer) -> Void
+     ) {
+         lg.log("[startAudioEngine]")
+-        guard let audioEngine, let hardwareFormat = self.recognizerDelegate?.hardwareFormat else {
+-            return
++        bufferHandler = onBuffer
++        observeEngineLifetime()
++        resumeAudioEngine(reportFailure: true)
++    }
++
++    private func observeEngineLifetime() {
++        guard engineObservers.isEmpty, let audioEngine else { return }
++        let configuration = NotificationCenter.default.addObserver(
++            forName: .AVAudioEngineConfigurationChange,
++            object: audioEngine,
++            queue: .main
++        ) { [weak self] _ in
++            self?.resumeAudioEngine(reportFailure: false)
+         }
++        let interruption = NotificationCenter.default.addObserver(
++            forName: AVAudioSession.interruptionNotification,
++            object: AVAudioSession.sharedInstance(),
++            queue: .main
++        ) { [weak self] notification in
++            guard
++                let value = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
++                let type = AVAudioSession.InterruptionType(rawValue: value),
++                type == .ended
++            else { return }
++            self?.resumeAudioEngine(reportFailure: false)
++        }
++        engineObservers = [configuration, interruption]
++    }
++
++    private func resumeAudioEngine(reportFailure: Bool) {
++        guard !resumingEngine else { return }
++        guard status == .active || status == .starting else { return }
++        guard let audioEngine, let bufferHandler else { return }
++        resumingEngine = true
++        defer { resumingEngine = false }
++        if !audioEngine.inputNode.isVoiceProcessingEnabled {
++            try? audioEngine.inputNode.setVoiceProcessingEnabled(true)
++        }
++        let hardwareFormat = audioEngine.inputNode.outputFormat(forBus: 0)
++        recognizerDelegate?.setHardwareFormat(format: hardwareFormat)
+         audioEngine.inputNode.removeTap(onBus: 0)
+         audioEngine.inputNode.installTap(
+             onBus: 0,
+@@ -169,7 +209,6 @@ class RecognizerEngine {
+                 buffer,
+                 recognizerDelegate.config?.resetAutoFinishVoiceSensitivity
+             ) {
+-                // Send buffer volume data
+                 recognizerDelegate.volumeChange(
+                     event:
+                         VolumeChangeEvent(
+@@ -182,19 +221,22 @@ class RecognizerEngine {
+                     self.autoStopper?.resetTimer(from: "rms threshold")
+                 }
+             }
+-            onBuffer(buffer)
++            bufferHandler(buffer)
+         }
+         lg.log("[startAudioEngine.installTap]")
+         do {
+-            audioEngine.prepare()
+-            lg.log("[startAudioEngine.prepare]")
+-            try audioEngine.start()
++            if !audioEngine.isRunning {
++                audioEngine.prepare()
++                try audioEngine.start()
++            }
+             lg.log("[startAudioEngine.start]")
+         } catch {
+-            self.reportError(
+-                from: "Audio Engine",
+-                code: SpeechRecognitionError.sessionstartfailed
+-            )
++            if reportFailure {
++                self.reportError(
++                    from: "Audio Engine",
++                    code: SpeechRecognitionError.sessionstartfailed
++                )
++            }
+         }
+     }
+     
+@@ -205,6 +247,11 @@ class RecognizerEngine {
+         let wasActive = status == .active || status == .finishing
+         deinitAutoStop()
+         stopAppStateObserver()
++        for observer in engineObservers {
++            NotificationCenter.default.removeObserver(observer)
++        }
++        engineObservers = []
++        bufferHandler = nil
+         stopAudioSession()
+         audioLevelTracker.reset()
+         
+@@ -307,10 +354,8 @@ class RecognizerEngine {
+     // MARK: App State Observer
+     
+     private func startAppStateObserver() {
+-        appStateObserver = AppStateObserver { [weak self] in
+-            guard let self else { return }
+-            try? self.stop()
+-        }
++        // Background and the lock screen must keep the recognizer running.
++        // CallKit owns that lifetime; stopping here ends dictation on lock.
+     }
+     
+     private func stopAppStateObserver() {
+@@ -346,7 +391,11 @@ class RecognizerEngine {
+     private func startAudioSession() {
+         do {
+             let audioSession = AVAudioSession.sharedInstance()
+-            try audioSession.setCategory(.playAndRecord, mode: .default, options: .duckOthers)
++            try audioSession.setCategory(
++                .playAndRecord,
++                mode: .voiceChat,
++                options: [.allowBluetoothHFP, .defaultToSpeaker]
++            )
+             // Required for haptic feedback
+             try audioSession.setAllowHapticsAndSystemSoundsDuringRecording(true)
+             try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
+@@ -358,10 +407,10 @@ class RecognizerEngine {
+         }
+     }
+     private func stopAudioSession() {
++        guard status == .finishing else { return }
+         do {
+             try AVAudioSession.sharedInstance().setActive(false)
+         } catch {
+-            // Just log and no-op - not critical
+             lg.log("Failed to deactivate audio session: \(error.localizedDescription)")
+         }
+     }

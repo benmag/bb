@@ -30,6 +30,16 @@ import {
   voiceUnsupportedMessage,
   type VoiceUnsupportedReason,
 } from "./voice-input-support";
+import {
+  batchesToTranscript,
+  cancelShellNativeVoiceDictation,
+  getNativeShell,
+  isShellNativeVoiceDictationAvailable,
+  startShellNativeVoiceDictation,
+  stopShellNativeVoiceDictation,
+  subscribeShellNativeVoiceDictation,
+  syncShellNativeVoiceDictation,
+} from "@/lib/native-shell";
 
 type VoiceInputState = "idle" | "recording" | "transcribing" | "error";
 
@@ -39,6 +49,10 @@ interface UseVoiceInputOptions {
     transcript: string,
     delivery: VoiceDelivery,
   ) => void | Promise<void>;
+  onLiveTranscript?: (
+    transcript: string,
+    batches?: readonly string[],
+  ) => void;
   onTranscribe: (args: {
     file: File;
     promptContext?: string;
@@ -167,6 +181,8 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
   const wakeLockSentinelRef = useRef<WakeLockSentinel | null>(null);
   const wakeLockRequestRef = useRef<Promise<void> | null>(null);
   const shouldHoldWakeLockRef = useRef(false);
+  const nativeDictationRef = useRef(false);
+  const nativeBatchesRef = useRef<string[]>([]);
 
   const [state, setState] = useState<VoiceInputState>("idle");
   const [delivery, setDelivery] = useState<VoiceDelivery>("insert");
@@ -357,11 +373,57 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
     void sentinel.release().catch(() => {});
   }, []);
 
-  useEffect(() => {
+  const refreshVoiceSupport = useCallback(() => {
     const support = resolveVoiceSupport(readVoiceSupportEnvironment());
     setIsSupported(support.isSupported);
     setUnsupportedReason(support.reason);
   }, []);
+
+  useEffect(() => {
+    refreshVoiceSupport();
+    const shell = getNativeShell();
+    if (shell === null) {
+      const id = window.setInterval(refreshVoiceSupport, 250);
+      const stop = window.setTimeout(() => clearInterval(id), 4_000);
+      return () => {
+        clearInterval(id);
+        clearTimeout(stop);
+      };
+    }
+    return subscribeToDocumentVisibility(() => {
+      if (isDocumentVisible()) refreshVoiceSupport();
+    });
+  }, [refreshVoiceSupport]);
+
+  useEffect(() => {
+    if (!isShellNativeVoiceDictationAvailable()) return;
+    return subscribeShellNativeVoiceDictation((event) => {
+      if (event.type === "voice-dictation-partial") {
+        nativeBatchesRef.current = [...event.batches];
+        if (nativeDictationRef.current) {
+          options.onLiveTranscript?.(
+            batchesToTranscript(nativeBatchesRef.current),
+            nativeBatchesRef.current,
+          );
+        }
+        return;
+      }
+      if (event.type === "voice-dictation-ended") {
+        nativeDictationRef.current = false;
+        nativeBatchesRef.current = [...event.batches];
+        if (state === "recording") {
+          setState("idle");
+        }
+      }
+      if (event.type === "resume" && nativeDictationRef.current) {
+        void syncShellNativeVoiceDictation().then((batches) => {
+          if (batches.length === 0) return;
+          nativeBatchesRef.current = batches;
+          options.onLiveTranscript?.(batchesToTranscript(batches), batches);
+        });
+      }
+    });
+  }, [options, state]);
 
   useEffect(() => {
     return () => {
@@ -509,6 +571,41 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
       state === "recording" ||
       state === "transcribing"
     ) {
+      return;
+    }
+
+    if (isShellNativeVoiceDictationAvailable()) {
+      startingRef.current = true;
+      try {
+        const promptContext = options.getPromptContext?.()?.trim();
+        const contextualStrings =
+          promptContext && promptContext.length > 0
+            ? promptContext
+                .split(/\s+/)
+                .filter((word) => word.length > 1)
+                .slice(-40)
+            : undefined;
+        nativeBatchesRef.current = [];
+        nativeDictationRef.current = true;
+        setState("recording");
+        setDelivery("insert");
+        const locale =
+          typeof navigator !== "undefined" &&
+          typeof navigator.language === "string" &&
+          navigator.language.length > 0
+            ? navigator.language.replace("_", "-")
+            : "en-US";
+        await startShellNativeVoiceDictation({
+          locale,
+          contextualStrings,
+        });
+      } catch (error) {
+        nativeDictationRef.current = false;
+        setState("idle");
+        showError(resolveRecordingErrorMessage(error));
+      } finally {
+        startingRef.current = false;
+      }
       return;
     }
 
@@ -666,6 +763,34 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
         return;
       }
 
+      if (nativeDictationRef.current) {
+        deliveryRef.current = nextDelivery;
+        setDelivery(nextDelivery);
+        void (async () => {
+          try {
+            const text = normalizeTranscript(await stopShellNativeVoiceDictation());
+            nativeDictationRef.current = false;
+            if (nextDelivery === "send") {
+              if (text.length > 0) {
+                await options.onTranscript(text, nextDelivery);
+              }
+              setState("idle");
+              return;
+            }
+            const liveText = batchesToTranscript(nativeBatchesRef.current);
+            if (liveText.length === 0 && text.length > 0) {
+              await options.onTranscript(text, nextDelivery);
+            }
+            await options.playCompletionTransition?.();
+            setState("idle");
+          } catch (error) {
+            showError(resolveRecordingErrorMessage(error));
+            setState("idle");
+          }
+        })();
+        return;
+      }
+
       const recorder = mediaRecorderRef.current;
       if (!recorder || recorder.state !== "recording") {
         return;
@@ -681,7 +806,7 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
         showError(resolveRecordingErrorMessage(error));
       }
     },
-    [showError, state],
+    [options, showError, state],
   );
 
   const retry = useCallback(
@@ -705,6 +830,13 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
   }, []);
 
   const cancel = useCallback(() => {
+    if (state === "recording" && nativeDictationRef.current) {
+      nativeDictationRef.current = false;
+      void cancelShellNativeVoiceDictation().catch(() => undefined);
+      setState("idle");
+      return;
+    }
+
     if (state === "recording") {
       const recorder = mediaRecorderRef.current;
       if (recorder && recorder.state === "recording") {

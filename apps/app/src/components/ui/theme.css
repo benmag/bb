@@ -537,6 +537,10 @@
   --warning-text: oklch(0.55 0.14 50);
   --success: oklch(0.7 0.15 155);
   --success-foreground: oklch(0.53 0.14 155);
+  --dictation-phrase-1: oklch(0.52 0.15 250);
+  --dictation-phrase-2: oklch(0.5 0.14 165);
+  --dictation-phrase-3: oklch(0.52 0.17 320);
+  --dictation-phrase-4: oklch(0.55 0.14 65);
   --diff-added: oklch(0.4 0.13 163);
   --pr-merged: oklch(0.53 0.2 295);
   --brand-discord: oklch(0.5774 0.2091 273.85);
@@ -768,6 +772,10 @@
   --warning-text: oklch(0.75 0.16 50);
   --success: oklch(0.74 0.15 155);
   --success-foreground: var(--success);
+  --dictation-phrase-1: oklch(0.76 0.14 250);
+  --dictation-phrase-2: oklch(0.78 0.14 165);
+  --dictation-phrase-3: oklch(0.76 0.15 320);
+  --dictation-phrase-4: oklch(0.8 0.13 65);
   --diff-added: oklch(0.77 0.17 163);
   --diff-removed: oklch(0.72 0.19 22);
   --pr-merged: oklch(0.68 0.18 295);

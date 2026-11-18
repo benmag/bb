@@ -1485,7 +1485,7 @@ describe("ComposerBox controlled value sync", () => {
     }
   });
 
-  it("blurs the editor before starting voice input on coarse pointers", async () => {
+  it("keeps the editor focused when starting voice input on coarse pointers", async () => {
     const restoreMatchMedia = mockPointerCoarse(true);
     try {
       const start = vi.fn();
@@ -1509,7 +1509,7 @@ describe("ComposerBox controlled value sync", () => {
       );
 
       expect(start).toHaveBeenCalledOnce();
-      expect(document.activeElement).not.toBe(editor);
+      expect(document.activeElement).toBe(editor);
     } finally {
       restoreMatchMedia();
     }
@@ -3936,7 +3936,64 @@ describe("ComposerBox compact layout", () => {
     ).toBe(true);
   });
 
-  it.each(["recording", "transcribing"] as const)(
+  it("keeps the visible draft editable while recording", async () => {
+    const onChange = vi.fn();
+    render(
+      <ComposerBox
+        {...createPromptBoxProps({
+          value: "Keep this prompt unchanged",
+          onChange,
+          voice: createVoiceConfig({ state: "recording" }),
+        })}
+      />,
+    );
+
+    const editor = getPromptEditorElement();
+    await waitFor(() =>
+      expect(editor.getAttribute("contenteditable")).toBe("true"),
+    );
+    expect(editor.getAttribute("tabindex")).toBe("0");
+    expect(editor.getAttribute("aria-readonly")).toBeNull();
+    for (const controls of document.querySelectorAll(
+      "[data-promptbox-standard-actions]",
+    )) {
+      expect(controls.hasAttribute("inert")).toBe(false);
+    }
+  });
+
+  it("holds live dictation text until a focused editor blurs", async () => {
+    const voice = createVoiceConfig({ state: "recording" });
+    const view = render(
+      <ComposerBox
+        {...createPromptBoxProps({
+          value: "Typed while the keyboard is open",
+          voice,
+        })}
+      />,
+    );
+    const editor = getPromptEditorElement();
+    editor.focus();
+    await waitFor(() => expect(document.activeElement).toBe(editor));
+
+    view.rerender(
+      <ComposerBox
+        {...createPromptBoxProps({
+          value: "Typed while the keyboard is open plus dictated words",
+          voice,
+        })}
+      />,
+    );
+    expect(editor.textContent).toBe("Typed while the keyboard is open");
+
+    act(() => editor.blur());
+    await waitFor(() =>
+      expect(editor.textContent).toBe(
+        "Typed while the keyboard is open plus dictated words",
+      ),
+    );
+  });
+
+  it.each(["transcribing"] as const)(
     "keeps the visible draft keyboard-read-only and standard controls inert while %s",
     async (state) => {
       const onChange = vi.fn();
@@ -4060,7 +4117,18 @@ describe("ComposerBox compact layout", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
-  it.each(["recording", "transcribing"] as const)(
+  it("expands empty compact drafts while recording", () => {
+    const props = createPromptBoxProps({
+      compact: { when: "always", placeholder: "Ask a follow-up" },
+      voice: createVoiceConfig({ state: "recording" }),
+    });
+    render(<ComposerBox {...props} />);
+    const form = document.querySelector("[data-promptbox]");
+    expect(form?.hasAttribute("data-promptbox-compact")).toBe(false);
+    expect(getPromptEditorElement()).toBeTruthy();
+  });
+
+  it.each(["transcribing"] as const)(
     "keeps empty compact drafts compact while %s and reveals existing draft content",
     (state) => {
       const props = createPromptBoxProps({
@@ -4120,7 +4188,7 @@ describe("ComposerBox compact layout", () => {
     const waveform = document.querySelector("canvas[aria-hidden]");
 
     expect(main?.classList.contains("opacity-0")).toBe(false);
-    expect(main?.classList.contains("pointer-events-none")).toBe(true);
+    expect(main?.classList.contains("pointer-events-none")).toBe(false);
     expect(layout?.style.gridTemplateRows).toBe("1fr");
     expect(getPromptEditorElement().textContent).toBe(
       "Keep this prompt visible while I dictate",

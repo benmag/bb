@@ -1,4 +1,37 @@
 @layer components {
+  [data-promptbox][data-promptbox-voice-recording] {
+    border-color: color-mix(in oklch, var(--destructive) 50%, var(--border));
+    box-shadow:
+      0 0 0 1px color-mix(in oklch, var(--destructive) 22%, transparent),
+      0 0 0 4px color-mix(in oklch, var(--destructive) 10%, transparent),
+      var(--shadow-lift);
+    transition:
+      border-color 200ms ease,
+      box-shadow 200ms ease;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    [data-promptbox][data-promptbox-voice-recording] {
+      animation: promptbox-voice-recording-glow 2.4s ease-in-out infinite;
+    }
+  }
+
+  @keyframes promptbox-voice-recording-glow {
+    0%,
+    100% {
+      box-shadow:
+        0 0 0 1px color-mix(in oklch, var(--destructive) 20%, transparent),
+        0 0 0 3px color-mix(in oklch, var(--destructive) 8%, transparent),
+        var(--shadow-lift);
+    }
+    50% {
+      box-shadow:
+        0 0 0 1px color-mix(in oklch, var(--destructive) 30%, transparent),
+        0 0 0 5px color-mix(in oklch, var(--destructive) 14%, transparent),
+        var(--shadow-lift);
+    }
+  }
+
   .ProseMirror ::selection {
     background-color: var(--surface-selected);
   }

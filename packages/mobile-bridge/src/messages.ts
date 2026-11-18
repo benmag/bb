@@ -59,6 +59,21 @@ const bridgeRequestSchema = z.discriminatedUnion("kind", [
         .strict(),
     })
     .strict(),
+  z
+    .object({
+      kind: z.literal("voice-dictation-start"),
+      payload: z
+        .object({
+          locale: z.string().max(32).optional(),
+          contextualStrings: z.array(z.string().max(200)).max(100).optional(),
+          autoFinishRecognitionMs: z.number().int().min(0).max(3_600_000).optional(),
+        })
+        .strict(),
+    })
+    .strict(),
+  z.object({ kind: z.literal("voice-dictation-stop"), payload: z.null() }).strict(),
+  z.object({ kind: z.literal("voice-dictation-cancel"), payload: z.null() }).strict(),
+  z.object({ kind: z.literal("voice-dictation-sync"), payload: z.null() }).strict(),
 ]);
 
 export const NATIVE_SCREENS = ["device-settings"] as const;
@@ -86,6 +101,15 @@ export const pageToShellMessageSchema = z.discriminatedUnion("type", [
     .object({
       type: z.literal("switch-server"),
       id: z.string().min(1).max(256),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("composer-dictation-keyboard"),
+      open: z.boolean(),
+      text: z.string().max(100_000),
+      selectionStart: z.number().int().min(0).max(100_000).optional(),
+      selectionEnd: z.number().int().min(0).max(100_000).optional(),
     })
     .strict(),
   z

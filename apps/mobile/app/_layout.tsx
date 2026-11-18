@@ -15,6 +15,7 @@ import {
   ShareIntentHandler,
   ThreadOpenSignalHandler,
   useAppBoot,
+  useExpoUpdates,
 } from "@/app-shell";
 import { PushNotificationsHost } from "@/notifications";
 import { RootNavigator, RouteErrorBoundary } from "@/screens";
@@ -29,6 +30,7 @@ export { RouteErrorBoundary as ErrorBoundary };
 
 export default function RootLayout() {
   const boot = useAppBoot();
+  useExpoUpdates();
 
   if (!boot.ready) return null;
 

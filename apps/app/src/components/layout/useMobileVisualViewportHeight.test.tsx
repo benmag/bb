@@ -415,6 +415,42 @@ describe("useMobileVisualViewportHeight", () => {
     });
   });
 
+  it("collapses the bottom safe-area inset while the shell dictation keyboard is open", async () => {
+    const visualViewport = new FakeVisualViewport();
+    visualViewport.offsetTop = 0;
+    await withFakeVisualViewport(visualViewport, async () => {
+      render(<VisualViewportShell />);
+      const viewportStyleRoot = document.body;
+      expect(
+        viewportStyleRoot.style.getPropertyValue(
+          SHELL_SAFE_AREA_BOTTOM_PROPERTY,
+        ),
+      ).toBe("");
+
+      act(() => {
+        document.documentElement.dataset.shellDictationKeyboard = "";
+        visualViewport.dispatchEvent(new Event("resize"));
+      });
+      await flushScheduledViewportPass();
+      expect(
+        viewportStyleRoot.style.getPropertyValue(
+          SHELL_SAFE_AREA_BOTTOM_PROPERTY,
+        ),
+      ).toBe("0px");
+
+      act(() => {
+        delete document.documentElement.dataset.shellDictationKeyboard;
+        window.dispatchEvent(new Event("resize"));
+      });
+      await flushScheduledViewportPass();
+      expect(
+        viewportStyleRoot.style.getPropertyValue(
+          SHELL_SAFE_AREA_BOTTOM_PROPERTY,
+        ),
+      ).toBe("");
+    });
+  });
+
   it("does not collapse the inset for a URL bar that only shrinks a little", async () => {
     const visualViewport = new FakeVisualViewport();
     visualViewport.offsetTop = 0;

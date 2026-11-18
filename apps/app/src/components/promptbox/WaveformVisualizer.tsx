@@ -4,6 +4,7 @@ import { cn } from "@bb/shared-ui/lib/utils";
 interface WaveformVisualizerProps {
   stream: MediaStream | null;
   active: boolean;
+  level?: number | null;
   className?: string;
 }
 
@@ -19,10 +20,14 @@ const IDLE_AMPLITUDE = 0.06;
 export function WaveformVisualizer({
   stream,
   active,
+  level = null,
   className,
 }: WaveformVisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const barsRef = useRef<number[]>([]);
+  const levelRef = useRef(level);
+  levelRef.current = level;
+  const tracksLevel = level !== null;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -93,10 +98,33 @@ export function WaveformVisualizer({
     measure();
 
     const audioTrack = stream?.getAudioTracks()[0] ?? null;
+    const levelDriven = active && audioTrack === null && tracksLevel;
     const canAnimate =
       active &&
       audioTrack !== null &&
       typeof window.AudioContext !== "undefined";
+
+    if (levelDriven) {
+      let frame = 0;
+      let rafId = 0;
+      const tick = () => {
+        if (frame % SAMPLE_EVERY_N_FRAMES === 0) {
+          const amp = Math.min(1, Math.max(0, levelRef.current ?? 0));
+          const bars = barsRef.current;
+          bars.push(amp);
+          if (bars.length > barCount) bars.shift();
+          draw();
+        }
+        frame++;
+        rafId = requestAnimationFrame(tick);
+      };
+      const observer = observeResize(redrawOnResize);
+      rafId = requestAnimationFrame(tick);
+      return () => {
+        cancelAnimationFrame(rafId);
+        observer?.disconnect();
+      };
+    }
 
     if (!canAnimate || audioTrack === null) {
       if (barsRef.current.length === 0) {
@@ -156,7 +184,7 @@ export function WaveformVisualizer({
       analysisTrack.stop();
       void audioCtx.close();
     };
-  }, [stream, active]);
+  }, [stream, active, tracksLevel]);
 
   return (
     <canvas

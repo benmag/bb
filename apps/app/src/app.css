@@ -264,6 +264,66 @@
     container: promptbox-shell / inline-size;
   }
 
+  html[data-shell-dictation-keyboard] [data-promptbox-shell],
+  html[data-shell-dictation-keyboard] [data-promptbox] {
+    visibility: hidden;
+  }
+
+  html[data-shell-dictation-keyboard] [data-promptbox] .ProseMirror {
+    pointer-events: none;
+    caret-color: transparent;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  #bb-dictation-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    pointer-events: none;
+  }
+
+  #bb-dictation-overlay > * {
+    position: fixed;
+  }
+
+  [data-dictation-marks] {
+    position: static;
+  }
+
+  [data-dictation-marks] > * {
+    position: fixed;
+  }
+
+  [data-dictation-tap] {
+    pointer-events: auto;
+    touch-action: manipulation;
+  }
+
+  [data-dictation-underline] {
+    border-radius: 1px;
+    background-color: var(--bb-dictation-phrase);
+  }
+
+  [data-dictation-underline="revising"] {
+    opacity: 0.45;
+  }
+
+  [data-dictation-selection] {
+    border-radius: 3px;
+    background-color: color-mix(
+      in oklab,
+      var(--bb-dictation-phrase) 28%,
+      transparent
+    );
+    box-shadow: inset 0 -2px 0 0 var(--bb-dictation-phrase);
+  }
+
+  [data-dictation-caret] {
+    border-radius: 1px;
+    background-color: var(--ink);
+  }
+
   /*
    * The thread pane (timeline + composer footer) is a size container so a
    * short stacked split can compact the follow-up composer. Its dimensions

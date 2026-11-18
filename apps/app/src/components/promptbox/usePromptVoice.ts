@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
+import { useShellComposerDictationKeyboard } from "@/hooks/useShellComposerDictationKeyboard";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { transcribeVoiceInput } from "@/lib/api";
 import type { VoiceDelivery } from "@/lib/voice-recording-store";
@@ -34,13 +35,17 @@ export function usePromptVoice(
     };
   }, []);
 
+  const commitRef = useRef<string | null>(null);
   const onTranscript = useCallback(
-    (text: string, delivery: VoiceDelivery) =>
-      deliverPromptVoiceTranscript(text, delivery, {
+    (text: string, delivery: VoiceDelivery) => {
+      const committed = commitRef.current;
+      commitRef.current = null;
+      return deliverPromptVoiceTranscript(committed ?? text, delivery, {
         mounted: mountedRef.current,
         promptBox: promptBoxRef.current,
         draft,
-      }),
+      });
+    },
     [draft, promptBoxRef],
   );
 
@@ -48,6 +53,32 @@ export function usePromptVoice(
     () => promptBoxRef.current?.voice?.textBeforeCursor() ?? undefined,
     [promptBoxRef],
   );
+
+  const stopRef = useRef<(delivery: VoiceDelivery) => void>(() => {});
+  const cancelRef = useRef<() => void>(() => {});
+
+  const commitDictation = useCallback(
+    (text: string, action: "insert" | "discard") => {
+      if (action === "discard") {
+        cancelRef.current();
+        return;
+      }
+      commitRef.current = text;
+      if (draft) {
+        const current = draft.getCurrent();
+        draft.setDraft({ ...current, text });
+      }
+      stopRef.current("insert");
+    },
+    [draft],
+  );
+
+  const shellKeyboard = useShellComposerDictationKeyboard(
+    () => {},
+    commitDictation,
+  );
+
+  const onLiveTranscript = useCallback(() => {}, []);
 
   const playCompletionTransition = useCallback(
     () => promptBoxRef.current?.voice?.playCompletionTransition(),
@@ -57,12 +88,32 @@ export function usePromptVoice(
   const voiceInput = useVoiceInput({
     recordingKey,
     onTranscript,
+    onLiveTranscript,
     onTranscribe: requestVoiceTranscription,
     getPromptContext,
     playCompletionTransition,
   });
 
-  const { stop: stopVoiceInput } = voiceInput;
+  const startWithAnchor = useCallback(async () => {
+    const anchor = draft?.getCurrent().text ?? "";
+    if (shellKeyboard.available) {
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
+      shellKeyboard.open(anchor);
+    }
+    await voiceInput.start();
+  }, [draft, shellKeyboard, voiceInput]);
+
+  useEffect(() => {
+    if (voiceInput.state === "recording") return;
+    if (!shellKeyboard.isOpen) return;
+    shellKeyboard.close();
+  }, [shellKeyboard.close, shellKeyboard.isOpen, voiceInput.state]);
+
+  const { stop: stopVoiceInput, cancel: cancelVoiceInput } = voiceInput;
+  stopRef.current = stopVoiceInput;
+  cancelRef.current = cancelVoiceInput;
   const stop = useCallback(() => stopVoiceInput("insert"), [stopVoiceInput]);
   const send = useCallback(() => stopVoiceInput("send"), [stopVoiceInput]);
 
@@ -74,7 +125,7 @@ export function usePromptVoice(
       isSupported: voiceInput.isSupported,
       stream: voiceInput.stream,
       failedRecordings: voiceInput.failedRecordings,
-      start: voiceInput.start,
+      start: startWithAnchor,
       stop,
       send,
       retry: voiceInput.retry,
@@ -89,7 +140,7 @@ export function usePromptVoice(
       voiceInput.isSupported,
       voiceInput.stream,
       voiceInput.failedRecordings,
-      voiceInput.start,
+      startWithAnchor,
       stop,
       send,
       voiceInput.retry,

@@ -7,19 +7,26 @@ import {
   type PageToShellMessage,
   type ShellToPageEvent,
 } from "@bb/mobile-bridge";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { Linking, Platform, Share } from "react-native";
 import type { WebView, WebViewMessageEvent } from "react-native-webview";
 import { describeError } from "@/lib/describe-error";
 import { haptic } from "@/lib/haptics";
 import { buildBridgeSharePayload, isExternallyOpenable } from "@/lib/shell";
 import { updateAppBadgeCount } from "@/notifications/AppBadgeSync";
+import { getVoiceDictationSession } from "@/lib/voice-dictation";
 
 export interface ShellBridgeCallbacks {
   onReady(path: string): void;
   onPath(path: string): void;
   onOpenNative(screen: NativeScreen): void;
   onSwitchServer(id: string): void;
+  onComposerDictationKeyboard?(input: {
+    open: boolean;
+    text: string;
+    selectionStart?: number;
+    selectionEnd?: number;
+  }): void;
 }
 
 export interface ShellBridge {
@@ -40,6 +47,10 @@ export function useShellBridge(
     },
     [webViewRef],
   );
+
+  useEffect(() => {
+    getVoiceDictationSession().attachEmitter(send);
+  }, [send]);
 
   const respond = useCallback(
     (id: string, response: BridgeResponse) => {
@@ -68,6 +79,14 @@ export function useShellBridge(
           return;
         case "switch-server":
           callbacksRef.current.onSwitchServer(message.id);
+          return;
+        case "composer-dictation-keyboard":
+          callbacksRef.current.onComposerDictationKeyboard?.({
+            open: message.open,
+            text: message.text,
+            selectionStart: message.selectionStart,
+            selectionEnd: message.selectionEnd,
+          });
           return;
         case "open-external": {
           if (!isExternallyOpenable(message.url)) return;
@@ -104,7 +123,56 @@ export function useShellBridge(
                 error: describeError(error),
               });
             }
+            return;
           }
+          const voiceSession = getVoiceDictationSession();
+          if (message.request.kind === "voice-dictation-start") {
+            try {
+              await voiceSession.start(message.request.payload);
+              respond(message.id, { ok: true, result: null });
+            } catch (error) {
+              respond(message.id, {
+                ok: false,
+                error: describeError(error),
+              });
+            }
+            return;
+          }
+          if (message.request.kind === "voice-dictation-stop") {
+            try {
+              const text = await voiceSession.stop();
+              respond(message.id, { ok: true, result: { text } });
+            } catch (error) {
+              respond(message.id, {
+                ok: false,
+                error: describeError(error),
+              });
+            }
+            return;
+          }
+          if (message.request.kind === "voice-dictation-cancel") {
+            try {
+              await voiceSession.cancel();
+              respond(message.id, { ok: true, result: null });
+            } catch (error) {
+              respond(message.id, {
+                ok: false,
+                error: describeError(error),
+              });
+            }
+            return;
+          }
+          if (message.request.kind === "voice-dictation-sync") {
+            respond(message.id, {
+              ok: true,
+              result: { batches: [...voiceSession.getBatches()] },
+            });
+            return;
+          }
+          respond(message.id, {
+            ok: false,
+            error: `Unsupported native request: ${message.request.kind}`,
+          });
           return;
         }
       }

@@ -38,6 +38,11 @@ describe("parsePageToShellMessage", () => {
       { type: "open-native", screen: "device-settings" },
       { type: "switch-server", id: "profile-2" },
       {
+        type: "composer-dictation-keyboard",
+        open: true,
+        text: "hello",
+      },
+      {
         type: "request",
         id: "r1-app",
         request: {

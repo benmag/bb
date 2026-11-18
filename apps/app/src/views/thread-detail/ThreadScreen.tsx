@@ -694,7 +694,9 @@ function ThreadScreenPanelShell({
         >
           {surface}
         </div>
-        <div className="sticky bottom-0 z-20">{footer}</div>
+        <div data-scroll-footer="" className="sticky bottom-0 z-20">
+          {footer}
+        </div>
       </div>
     );
   }

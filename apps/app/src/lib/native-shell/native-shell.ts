@@ -105,15 +105,17 @@ function buildNativeShell(): NativeShell | null {
   };
 }
 
-let cached: NativeShell | null | undefined;
+let cachedShell: NativeShell | null = null;
 
 export function getNativeShell(): NativeShell | null {
-  if (cached === undefined) cached = buildNativeShell();
-  return cached;
+  if (cachedShell !== null) return cachedShell;
+  const built = buildNativeShell();
+  if (built !== null) cachedShell = built;
+  return built;
 }
 
 export function resetNativeShellForTests(): void {
-  cached = undefined;
+  cachedShell = null;
 }
 
 export function isInsideNativeShell(): boolean {

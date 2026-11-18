@@ -235,6 +235,13 @@ screens, matching the fix proposed in upstream
 It addresses a release-build crash reproduced immediately after pairing on
 Android 16. Recheck and remove it when upgrading to a version with the fix.
 
+The iOS voice dictation spike patches `react-native-nitro-speech@0.4.9` at the
+repo root (`patches/react-native-nitro-speech@0.4.9.patch`). Shell and
+CallKit logic live under `src/lib/voice-dictation/`. Do not treat
+`node_modules` as canonical for Swift changes; use `pnpm patch` / `patch-commit`
+and rebuild the IPA. See [DICTATION_SPIKE.md](./DICTATION_SPIKE.md) for the
+full map and upgrade checklist.
+
 ### Android production setup
 
 The manual `Mobile Android (EAS)` workflow builds preview APKs or production

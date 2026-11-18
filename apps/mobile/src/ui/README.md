@@ -52,8 +52,9 @@ The native splash stays up until boot finishes, then `LaunchSplash` takes over
 with a pixel-identical React Native copy so the app keeps drawing underneath
 (Android's native splash blocks all drawing while it is up).
 Native screens fade the copy out on mount; `/` and `/webview` keep it until the
-web app reports ready or the shell shows an error (`revealApp()`), capped at
-eight seconds. Keep its logo sizes and colors in sync with the
+profile store is ready, the shell shows its own loading UI, the WebView starts
+loading, the document finishes loading, or an error is shown (`revealApp()`),
+capped at 1.5 seconds. Keep its logo sizes and colors in sync with the
 `expo-splash-screen` config in `app.json` and its overrides in `app.config.js`.
 The `bbMobileVariant` Expo extra value selects the orange dev logo for the
 React overlay, matching the native dev splash in both light and dark mode.

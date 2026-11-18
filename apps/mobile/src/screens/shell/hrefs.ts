@@ -59,3 +59,7 @@ type SettingsSectionRoute = "device" | "appearance" | "notifications";
 export function settingsSectionHref(section: SettingsSectionRoute): Href {
   return untypedHref(`/settings/${section}`);
 }
+
+export function voiceDictationSpikeHref(): Href {
+  return untypedHref("/dev/voice-dictation-spike");
+}

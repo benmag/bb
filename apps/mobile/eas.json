@@ -17,6 +17,37 @@
         "simulator": false
       }
     },
+    "dictation-spike": {
+      "extends": "development-device",
+      "ios": {
+        "credentialsSource": "local",
+        "image": "macos-tahoe-26.6-xcode-27.1"
+      },
+      "env": {
+        "BB_MOBILE_VARIANT": "dictation-spike",
+        "EAS_PROJECT_ID": "a6586611-fa47-43b6-b2be-51faac776272"
+      }
+    },
+    "dictation-spike-installable": {
+      "extends": "preview",
+      "developmentClient": false,
+      "channel": "dictation-spike",
+      "ios": {
+        "credentialsSource": "local",
+        "image": "macos-tahoe-26.6-xcode-27.1"
+      },
+      "env": {
+        "BB_MOBILE_VARIANT": "dictation-spike",
+        "EAS_PROJECT_ID": "a6586611-fa47-43b6-b2be-51faac776272"
+      }
+    },
+    "dictation-spike-simulator": {
+      "extends": "development",
+      "env": {
+        "BB_MOBILE_VARIANT": "dictation-spike",
+        "EAS_PROJECT_ID": "a6586611-fa47-43b6-b2be-51faac776272"
+      }
+    },
     "preview": {
       "distribution": "internal",
       "android": {
